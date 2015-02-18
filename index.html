@@ -1,0 +1,217 @@
+<input id="input" type="file"><hr>
+<p id="loading"></p>
+<center><output id="output"></output></center>
+
+<style>
+* {font-family:'Lucida Console';}
+canvas {border:1px solid;}
+#output {text-align:center;}
+#loading {font-size:2em;text-align:center;}
+</style>
+<script src="guitaredpgm.js"></script>
+<script src="control_region.js"></script>
+<script>
+
+//Global Variable
+
+var image; // input image
+var objimage; // input image
+var container = document.getElementById("output");
+
+//for choice3 (multiple image processing)
+var algreq = [false,false,false];
+var red_image,green_image,blue_image;
+
+//for choice4 (multiple image processing)
+var georeq = [false,false,false];
+var grid_image,distgrid_image,distlenna_image;
+var region;
+//------------------------------------------------------------------------------------------------------------------------------------------
+  
+  function handleFileSelect(evt) {
+    var files = evt.target.files; // FileList object
+	var f = files[0];
+      console.log('loading file : '+f.name);
+	  document.getElementById("loading").innerText = "PROCESSING...";
+	  var reader = new FileReader();
+	  reader.readAsBinaryString(f);
+	  reader.onload = function(e) {
+		 document.getElementById("loading").style.display = 'none';
+		 var data = e.target.result.split("\n");
+		 var version = data.shift();
+		 var comment = (data[0][0]=='#')?data.shift():'';
+		 var length = data.shift().split(" ");
+		 var width = length[0];
+		 var height = length[1];
+		 var maxlevel = data.shift();
+		 var value = data.join();
+		
+		//Create Original Image Object
+		 image = new Image(width,height,maxlevel,value);
+		 console.log("Image length :"+image.length);
+		 
+		 switch(f.name){
+			case "scaled_shapes.pgm":
+				choice1();
+				break;
+			case "Cameraman.pgm":
+			case "SEM256_256.pgm":
+				choice2();
+				break;
+			case "SanFranPeak_red.pgm":
+			case "SanFranPeak_green.pgm":
+			case "SanFranPeak_blue.pgm":
+				choice3(f.name);
+				break;
+			case "grid.pgm":
+			case "distgrid.pgm":
+			case "distlenna.pgm":
+				choice4(f.name);
+				break;
+			default:
+			generate();
+			break;
+		 } 
+	  }
+  }
+  document.getElementById('input').addEventListener('change', handleFileSelect, false);
+  
+  function generate(){
+	drawImage("Original Image",image);
+	drawHistogram("Original Histogram",image);
+  }
+  
+  function choice1(){
+	console.log("<Choice 1> : Histogram and Object Moment");
+	drawImage("Original Image",image);
+	drawHistogram("Original Histogram",image);
+	var a = [];
+	a = findObjects(image,1000);
+	for(k=0;k<a.length;k++){
+		var objimage = createBinaryObject(image,a[k].value);
+		ctx = drawImage("Object ["+k+"]",objimage,true);
+		console.log("Object ["+k+"]");
+		console.log("m00 : "+m00(objimage));
+		console.log("m10 : "+m10(objimage));
+		console.log("m01 : "+m01(objimage));
+		
+		//fill red dot (Center of mass)
+		var xpv = xp(objimage);
+		var ypv = yp(objimage);
+		console.log("xp : "+xpv);
+		console.log("yp : "+ypv);
+		ctx.fillStyle = "red";
+		ctx.fillRect(xpv,ypv,3,3);
+		
+		console.log("u20 : "+u20(objimage));
+		console.log("u02 : "+u02(objimage));
+		console.log("n20 : "+n20(objimage));
+		console.log("n02 : "+n02(objimage));
+		console.log("q1 : "+q1(objimage));
+		
+	}
+  }
+  function choice2(){
+	console.log("<Choice 2> : Point Operations");
+	drawImage("Original Image",image);
+	drawHistogram("Original Histogram",image);
+	var objimage  = createEqualizedImage(image);
+	console.log("Equalization Image...");
+	drawImage("Equalized Image",objimage);
+	drawHistogram("Equalized Histogram",objimage);
+  }
+  
+  function checkRequirementInput3(){
+	if(! algreq[0]){console.log("%c This operation require 'SanFranPeak_red.pgm' ,please input it.",'background: #eee;color: #ff0000');}
+	if(! algreq[1]){console.log("%c This operation require 'SanFranPeak_green.pgm' ,please input it.",'background: #eee;color: #00ff00');}
+	if(! algreq[2]){console.log("%c This operation require 'SanFranPeak_blue.pgm' ,please input it.",'background: #eee;color: #0000ff');}
+  }
+  
+  function choice3(name){
+	console.log("<Choice 3> : Algebraic Operations");
+	switch(name){
+		case "SanFranPeak_red.pgm":
+			if(algreq[0])return; // no duplicate input;
+			algreq[0]=true;
+			red_image = image;
+			checkRequirementInput3();
+			break;
+		case "SanFranPeak_green.pgm":
+			if(algreq[1])return; // no duplicate input;
+			algreq[1]=true;
+			green_image = image;
+			checkRequirementInput3();
+			break;
+		case "SanFranPeak_blue.pgm":
+			if(algreq[2])return; // no duplicate input;
+			algreq[2]=true;
+			blue_image = image;
+			checkRequirementInput3();
+			break;
+		default:
+			console.log("Error loading File , wrong file");
+			break;
+	}
+	if(algreq[0]&&algreq[1]&&algreq[2]){ //ready to processing
+		drawImage("Original Red Image",red_image);
+		drawHistogram("Original Red Histogram",red_image);
+		drawImage("Original Green Image",green_image);
+		drawHistogram("Original Green Histogram",green_image);
+		drawImage("Original Blue Image",blue_image);
+		drawHistogram("Original Blue Histogram",blue_image);
+		console.log("Finished rendering");
+		drawRGBImage("RGB Image",red_image,green_image,blue_image);
+		console.log("generating color image...");
+		drawExcessGreenImage("Excess Green Image",red_image,green_image,blue_image);
+		console.log("generating excess green image...");
+		drawRedBlueDifferenceImage("Red-Blue Difference Image",red_image,green_image,blue_image);
+		console.log("generating red-blue differencee image...");
+		
+	}
+  }
+  
+   function checkRequirementInput4(){
+	if(! georeq[0]){console.log("%c This operation require 'grid.pgm' ,please input it.",'background: #eee;color: #aaa');}
+	if(! georeq[1]){console.log("%c This operation require 'distgrid.pgm' ,please input it.",'background: #eee;color: #aaa');}
+	if(! georeq[2]){console.log("%c This operation require 'distlenna.pgm' ,please input it.",'background: #eee;color: #aaa');}
+  }
+  
+  function choice4(name){
+	console.log("<Choice 3> : Algebraic Operations");
+	switch(name){
+		case "grid.pgm":
+			if(georeq[0])return; // no duplicate input;
+			georeq[0]=true;
+			grid_image = image;
+			checkRequirementInput4();
+			break;
+		case "distgrid.pgm":
+			if(georeq[1])return; // no duplicate input;
+			georeq[1]=true;
+			distgrid_image = image;
+			checkRequirementInput4();
+			break;
+		case "distlenna.pgm":
+			if(georeq[2])return; // no duplicate input;
+			georeq[2]=true;
+			distlenna_image = image;
+			checkRequirementInput4();
+			break;
+		default:
+			console.log("Error loading File , wrong file");
+			break;
+	}
+	if(georeq[0]&&georeq[1]&&georeq[2]){ //ready to processing
+		console.log("Finished rendering");
+		drawImage("Grid Image",grid_image);
+		drawImage("Distribution Grid Image",distgrid_image);
+		drawImage("Distribution Image",distlenna_image);
+		console.log("Processing...");
+		drawControlRegion("Control Region",control_region);
+		var weightX = generateWx(control_region);
+		var weightY = generateWy(control_region);
+		drawUndistortImage("Undistort Grid",distgrid_image,control_region,weightX,weightY);
+		drawUndistortImage("Undistort Image",distlenna_image,control_region,weightX,weightY);
+	}
+  }
+</script>
